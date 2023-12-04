@@ -1,5 +1,7 @@
 use super::{vec, InnerNodeInfo, MerkleError, NodeIndex, Rpo256, RpoDigest, Vec};
+use crate::utils::string::ToString;
 use core::ops::{Deref, DerefMut};
+use winter_utils::{ByteReader, Deserializable, DeserializationError, Serializable};
 
 // MERKLE PATH
 // ================================================================================================
@@ -187,6 +189,55 @@ pub struct RootPath {
     pub root: RpoDigest,
     /// The path from `value` to `root` (exclusive).
     pub path: MerklePath,
+}
+
+// SERILIZATION
+// ================================================================================================
+impl Serializable for MerklePath {
+    fn write_into<W: winter_utils::ByteWriter>(&self, target: &mut W) {
+        target.write_u64(self.nodes.len() as u64);
+        self.nodes.write_into(target);
+    }
+}
+
+impl Deserializable for MerklePath {
+    fn read_from<R: ByteReader>(source: &mut R) -> Result<Self, DeserializationError> {
+        let count = source.read_u64()?.try_into().map_err(|_| {
+            DeserializationError::InvalidValue("can't fit count into usize".to_string())
+        })?;
+        let nodes = RpoDigest::read_batch_from(source, count)?;
+        Ok(Self { nodes })
+    }
+}
+
+impl Serializable for ValuePath {
+    fn write_into<W: winter_utils::ByteWriter>(&self, target: &mut W) {
+        self.value.write_into(target);
+        self.path.write_into(target);
+    }
+}
+
+impl Deserializable for ValuePath {
+    fn read_from<R: ByteReader>(source: &mut R) -> Result<Self, DeserializationError> {
+        let value = RpoDigest::read_from(source)?;
+        let path = MerklePath::read_from(source)?;
+        Ok(Self { value, path })
+    }
+}
+
+impl Serializable for RootPath {
+    fn write_into<W: winter_utils::ByteWriter>(&self, target: &mut W) {
+        self.root.write_into(target);
+        self.path.write_into(target);
+    }
+}
+
+impl Deserializable for RootPath {
+    fn read_from<R: ByteReader>(source: &mut R) -> Result<Self, DeserializationError> {
+        let root = RpoDigest::read_from(source)?;
+        let path = MerklePath::read_from(source)?;
+        Ok(Self { root, path })
+    }
 }
 
 // TESTS
